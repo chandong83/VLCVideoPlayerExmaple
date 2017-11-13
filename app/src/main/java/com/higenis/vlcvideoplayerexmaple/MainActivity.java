@@ -81,9 +81,12 @@ public class MainActivity extends AppCompatActivity  implements IVLCVout.Callbac
 
         //재생할 파일 경로
         mFilePath= "/sdcard/sprite.mp4";
-        //rtsp의 경우 true
         //mFilePath에 url 경로 지정
+        //mFilePath= "rtsp://192.168.25.41:8554/live.ts";
+        //rtsp의 경우 true
         isRtsp = false;
+        //isRtsp = true;
+
         //서페이스 연결 작업
         mSurface = (SurfaceView) findViewById(R.id.surface);
         holder = mSurface.getHolder();
