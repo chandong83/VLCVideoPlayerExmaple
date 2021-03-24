@@ -2,51 +2,53 @@ package com.higenis.vlcvideoplayerexmaple;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
-import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.constraint.ConstraintLayout;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Gravity;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.Toast;
 
-import org.videolan.libvlc.IVLCVout;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+
 import org.videolan.libvlc.LibVLC;
 import org.videolan.libvlc.Media;
 import org.videolan.libvlc.MediaPlayer;
+import org.videolan.libvlc.util.VLCVideoLayout;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 
-public class MainActivity extends AppCompatActivity  implements IVLCVout.Callback {
+public class MainActivity extends AppCompatActivity {
     public final static String TAG = "VLCVideoPlayerExample";
     private static final int REQUEST_READ_EXTERNAL_STORAGE_PERMISSION = 1;
-    ConstraintLayout mConstraintLayout;
-    // 화면 서페이스 변수
-    private SurfaceView mSurface;
-    private SurfaceHolder holder;
 
-    // vlc 변수들
-    private LibVLC libvlc;
+    /*
+     파일 재생 위치
+     String, Uri, FileDescriptor, AssetFileDescriptor 지원 함
+    */
+    private String mFilePath = "/sdcard/Download/ddudu.mp4";
+
+
+    // USE_TEXTURE_VIEW가 true이면 android.view.SurfaceView 대신 android.view.TextureView 을 사용한다.
+    //  - API 24 이상의 경우 android.view.SurfaceView로 사용하는 것을 권장함
+    private static final boolean USE_TEXTURE_VIEW = false;
+
+    // ENABLE_SUBTITLES가 true이면 자막 ON
+    private static final boolean ENABLE_SUBTITLES = true;
+
+    // 비디오 레이아웃
+    private VLCVideoLayout mVideoLayout = null;
+
+    // LibVLC 클래스
+    private LibVLC mLibVLC = null;
+
+    // 미디어 컨트롤러
     private MediaPlayer mMediaPlayer = null;
-    private int mVideoWidth;
-    private int mVideoHeight;
 
-    private String mFilePath ;
-    private boolean isRtsp=false;
-
-
+    // 퍼미션 요청 함수
     private void requestReadExternalStoragePermission() {
         requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_READ_EXTERNAL_STORAGE_PERMISSION);
     }
 
+    // 퍼미션 결과 콜백 함수
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
@@ -75,281 +77,67 @@ public class MainActivity extends AppCompatActivity  implements IVLCVout.Callbac
             }
         }
 
-        //전체화면 UI로 변경하기 위함
-        mConstraintLayout = (ConstraintLayout)findViewById(R.id.constraintLayout);
-        hideSystemUI();
+        // VLC 옵션
+        final ArrayList<String> args = new ArrayList<>();
+        args.add("-vv");
 
-        //재생할 파일 경로
-        mFilePath= "/sdcard/sprite.mp4";
-        //mFilePath에 url 경로 지정
-        //mFilePath= "rtsp://192.168.25.41:8554/live.ts";
-        //rtsp의 경우 true
-        isRtsp = false;
-        //isRtsp = true;
+        // LibVLC 클래스 생성
+        mLibVLC = new LibVLC(this, args);
 
-        //서페이스 연결 작업
-        mSurface = (SurfaceView) findViewById(R.id.surface);
-        holder = mSurface.getHolder();
+        // 미디어 컨트롤러 생성
+        mMediaPlayer = new MediaPlayer(mLibVLC);
 
-    }
-
-
-
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        createPlayer(mFilePath, isRtsp);
-    }
-
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        releasePlayer();
+        // 비디오 재생 레이아웃
+        mVideoLayout = findViewById(R.id.video_layout);
     }
 
     //종료
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        releasePlayer();
+        // 미디어 컨트롤러 제거
+        mMediaPlayer.release();
+
+        // VLC 제거
+        mLibVLC.release();
     }
 
     @Override
-    public void onConfigurationChanged(Configuration newConfig) {
-        //설정 변경이 이뤄졌을때...
-        //화면이 회전 되었다면...
-        super.onConfigurationChanged(newConfig);
-        setSize(mVideoWidth, mVideoHeight);
-    }
+    protected void onStart() {
+        super.onStart();
+        /*
+            attachViews: 비디오 레이아웃 View 에 연결
 
-    //시스템 UI 표시
-    private void showSystemUI() {
-        mConstraintLayout.setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
-    }
+            surfaceFrame(VLCVideoLayout): VLCVideoLayout 비디오가 출력될 레이아웃 변수
+            dm(DisplayManager): 렌더링 전환용 변수 옵션
+            subtitles(boolean): 자막 활성/비활성
+            textureView(boolean): View 선택
+         */
+        mMediaPlayer.attachViews(mVideoLayout, null, ENABLE_SUBTITLES, USE_TEXTURE_VIEW);
 
-    //전체 화면
-    private void hideSystemUI() {
-        // Set the IMMERSIVE flag.
-        // Set the content to appear under the system bars so that the content
-        // doesn't resize when the system bars hide and show.
-        mConstraintLayout.setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION // hide nav bar
-                        | View.SYSTEM_UI_FLAG_FULLSCREEN // hide status bar
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE);
-    }
+        /*
+            Media 미디어 로드
+            ILibVLC(ILibVLC): LibVLC 클래스 변수
+            path(String, Uri, FileDescriptor, AssetFileDescriptor): 미디어 객체
+         */
+        final Media media = new Media(mLibVLC, mFilePath);
 
-    /*
-    *  동영상 플레이어 시작
-    *  String mediaPath : 파일 경로
-    */
-    private void createPlayer(String mediaPath, boolean isURL) {
-        //플레이어가 있다면 종료(제거)
-        releasePlayer();
-        Log.d(TAG, "createPlayer");
-        try {
-            // 미디어 파일 경로 메시지 풍선으로 화면에 표시
-            if (mediaPath.length() > 0) {
-                Toast toast = Toast.makeText(this, mediaPath, Toast.LENGTH_LONG);
-                toast.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0,
-                        0);
-                toast.show();
-            }
+        // 미디어 컨트롤러 클래스에 미디어 적용
+        mMediaPlayer.setMedia(media);
 
+        media.release();
 
-            //libvlc 생성
-            // 옵션 추가 하기
-            // 다른 옵션 추가시 여기에 add로 추가해주면 됨.
-            ArrayList<String> options = new ArrayList<String>();
-            //options.add("--subsdec-encoding <encoding>");
-            options.add("--aout=opensles");
-            options.add("--audio-time-stretch"); // time stretching
-            options.add("-vvv"); // verbosity
-            //옵셕 적용하여 libvlc 생성
-            libvlc = new LibVLC(this, options);
-
-            // 화면 자동을 꺼지는 것 방지
-            holder.setKeepScreenOn(true);
-
-            // mediaplay 클래스 생성  (libvlc 라이브러리)
-            mMediaPlayer = new MediaPlayer(libvlc);
-            // 이벤트 리스너 연결
-            mMediaPlayer.setEventListener(mPlayerListener);
-
-            // 영상을 surface 뷰와 연결 시킴
-            final IVLCVout vout = mMediaPlayer.getVLCVout();
-            vout.setVideoView(mSurface);
-
-            //콜백 함수 등록
-            vout.addCallback(this);
-            //서페이스 홀더와 연결
-            vout.attachViews();
-
-            //동영상 파일 로딩
-            Media m;
-            if(isURL) {
-                m = new Media(libvlc, Uri.parse(mediaPath));
-            }
-            else {
-                m = new Media(libvlc, mediaPath);
-            }
-            mMediaPlayer.setMedia(m);
-            // 재생 시작
-            mMediaPlayer.play();
-
-        } catch (Exception e) {
-            Toast.makeText(this, "Error creating player!", Toast.LENGTH_LONG).show();
-        }
-    }
-    /*
-    *  동영상 플레이어 종료
-    */
-    private void releasePlayer() {
-        //라이브러리가 없다면
-        //바로 종료
-        if (libvlc == null)
-            return;
-        if(mMediaPlayer != null) {
-            //플레이 중지
-
-            mMediaPlayer.stop();
-
-            final IVLCVout vout = mMediaPlayer.getVLCVout();
-            //콜백함수 제거
-            vout.removeCallback(this);
-
-            //연결된 뷰 분리
-            vout.detachViews();
-        }
-
-        holder = null;
-        libvlc.release();
-        libvlc = null;
-
-        mVideoWidth = 0;
-        mVideoHeight = 0;
-    }
-
-    //영상 사이즈 변경
-    private void setSize(int width, int height) {
-        mVideoWidth = width;
-        mVideoHeight = height;
-        if (mVideoWidth * mVideoHeight <= 1)
-            return;
-
-        if(holder == null || mSurface == null)
-            return;
-
-        // get screen size
-        int w = getWindow().getDecorView().getWidth();
-        int h = getWindow().getDecorView().getHeight();
-
-        // getWindow().getDecorView() doesn't always take orientation into
-        // account, we have to correct the values
-        boolean isPortrait = getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
-        if (w > h && isPortrait || w < h && !isPortrait) {
-            int i = w;
-            w = h;
-            h = i;
-        }
-
-        float videoAR = (float) mVideoWidth / (float) mVideoHeight;
-        float screenAR = (float) w / (float) h;
-
-        if (screenAR < videoAR)
-            h = (int) (w / videoAR);
-        else
-            w = (int) (h * videoAR);
-
-        // force surface buffer size
-        holder.setFixedSize(mVideoWidth, mVideoHeight);
-
-        // set display size
-        ViewGroup.LayoutParams lp = mSurface.getLayoutParams();
-        lp.width = w;
-        lp.height = h;
-        mSurface.setLayoutParams(lp);
-        mSurface.invalidate();
-    }
-
-    /* IVLCVout.Callback override 함수 시작 */
-    @Override
-    public void onNewLayout(IVLCVout vout, int width, int height, int visibleWidth, int visibleHeight, int sarNum, int sarDen) {
-        //화면에 변화가 있거나 처음 생성 될때
-        if (width * height == 0)
-            return;
-
-        // store video size
-        mVideoWidth = width;
-        mVideoHeight = height;
-        setSize(mVideoWidth, mVideoHeight);
-    }
-
-
-
-
-    @Override
-    public void onSurfacesCreated(IVLCVout vout) {
-        //서페이스 생성 시
+        // 재생 시작
+        mMediaPlayer.play();
     }
 
     @Override
-    public void onSurfacesDestroyed(IVLCVout vout) {
-        //서페이스 종료 시
+    protected void onStop() {
+        super.onStop();
+        // 재생 중지
+        mMediaPlayer.stop();
+
+        // 연결된 View 제거
+        mMediaPlayer.detachViews();
     }
-
-    @Override
-    public void onHardwareAccelerationError(IVLCVout vlcVout) {
-        //하드웨어 가속 에러시 발생 함.
-        Log.e(TAG, "Error with hardware acceleration");
-        this.releasePlayer();
-        Toast.makeText(this, "Error with hardware acceleration", Toast.LENGTH_LONG).show();
-    }
-
-    /* IVLCVout.Callback override 함수 끝 */
-
-
-
-    /* MediaPlayer리스너 */
-    private MediaPlayer.EventListener mPlayerListener = new MediaPlayerListener(this);
-    private static class MediaPlayerListener implements MediaPlayer.EventListener {
-        private WeakReference<MainActivity> mOwner;
-
-        public MediaPlayerListener(MainActivity owner) {
-            mOwner = new WeakReference<MainActivity>(owner);
-        }
-
-        @Override
-        public void onEvent(MediaPlayer.Event event) {
-            MainActivity player = mOwner.get();
-
-            switch(event.type) {
-                case MediaPlayer.Event.EndReached:
-                    //동영상 끝까지 재생되었다면..
-                    player.releasePlayer();
-                    break;
-                case MediaPlayer.Event.Playing:
-                case MediaPlayer.Event.Paused:
-                case MediaPlayer.Event.Stopped:
-                    break;
-
-                    //아래 두 이벤트는 계속 발생됨
-                case MediaPlayer.Event.TimeChanged: //재생 시간 변화시
-                    break;
-                case MediaPlayer.Event.PositionChanged: //동영상 재생 구간 변화시
-                    //Log.d(TAG, "PositionChanged");
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-
 }
